@@ -7,10 +7,10 @@
 - [x] Initial architecture and roadmap docs
 
 ## Phase 3
-- [ ] Report upload endpoint and storage schema
-- [ ] Redis queue producer/consumer implementation
+- [x] Report upload endpoint and storage schema
+- [x] Redis queue producer/consumer implementation
 - [ ] Parser module for sosreport key signals
-- [ ] Dashboard report table from real API data
+- [x] Dashboard report table from real API data
 
 ## Phase 4
 - [ ] Local AI summarization pipeline with prompt templates

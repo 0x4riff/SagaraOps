@@ -60,11 +60,11 @@ This single project demonstrates:
 ## 🚀 Planned Features
 
 ### MVP
-- [ ] Upload `sosreport` manually
+- [x] Upload `sosreport` manually
 - [ ] Parse core diagnostics (disk, memory, failed services, network)
-- [ ] Rule-based severity scoring
+- [x] Rule-based initial severity scoring (worker placeholder)
 - [ ] AI-generated summary using free local LLM (Ollama)
-- [ ] Dashboard: report list + detail view
+- [x] Dashboard: report list view from real API
 
 ### V1
 - [ ] Agent push mode from remote hosts

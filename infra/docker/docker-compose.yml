@@ -27,8 +27,12 @@ services:
     environment:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sagaraops}:${POSTGRES_PASSWORD:-sagaraops}@postgres:5432/${POSTGRES_DB:-sagaraops}
+      UPLOAD_DIR: /data/uploads
     ports:
       - "${API_PORT:-8000}:8000"
+    volumes:
+      - uploads_data:/data/uploads
     depends_on:
       - redis
       - postgres
@@ -40,6 +44,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sagaraops}:${POSTGRES_PASSWORD:-sagaraops}@postgres:5432/${POSTGRES_DB:-sagaraops}
+    volumes:
+      - uploads_data:/data/uploads
     depends_on:
       - redis
       - postgres
@@ -57,3 +64,4 @@ services:
 volumes:
   pg_data:
   ollama_data:
+  uploads_data:

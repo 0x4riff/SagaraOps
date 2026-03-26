@@ -18,6 +18,8 @@ jobs:
       - name: Validate Python files
         run: |
           python -m py_compile apps/api/app/main.py
+          python -m py_compile apps/api/app/db.py
+          python -m py_compile apps/api/app/schemas.py
           python -m py_compile workers/analyzer/worker.py
 
   web-check:
