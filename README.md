@@ -141,6 +141,15 @@ SagaraOps/
 
 ---
 
+## Additional Documentation
+
+- [Architecture](docs/architecture.md)
+- [Roadmap](docs/roadmap.md)
+- [Use Cases](docs/use-cases.md)
+- [Design Decisions](docs/design-decisions.md)
+
+---
+
 ## Contributing
 
 Contributions are welcome.
