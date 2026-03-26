@@ -13,7 +13,7 @@
 - [x] Dashboard report table from real API data
 
 ## Phase 4
-- [ ] Local AI summarization pipeline with prompt templates
-- [ ] Severity scoring rules and confidence metadata
+- [x] Local AI summarization pipeline with prompt templates (with fallback)
+- [x] Severity scoring rules (signal-based baseline)
 - [ ] Export Markdown/PDF incident report
 - [ ] Notification integration (Telegram/Slack)

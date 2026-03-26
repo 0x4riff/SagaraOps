@@ -63,7 +63,7 @@ This single project demonstrates:
 - [x] Upload `sosreport` manually
 - [ ] Parse core diagnostics (disk, memory, failed services, network)
 - [x] Rule-based initial severity scoring (worker placeholder)
-- [ ] AI-generated summary using free local LLM (Ollama)
+- [x] AI-generated summary using free local LLM (Ollama) + fallback summary
 - [x] Dashboard: report list view from real API
 
 ### V1

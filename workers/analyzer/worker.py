@@ -1,6 +1,9 @@
+import io
 import json
 import os
+import tarfile
 import time
+import urllib.request
 from pathlib import Path
 
 import psycopg
@@ -12,19 +15,106 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://sagaraops:sagaraops@postgres:5432/sagaraops")
 
+SIGNALS = {
+    "critical": ["kernel panic", "filesystem corruption", "segfault"],
+    "high": ["out of memory", "oom-killer", "no space left on device", "disk full"],
+    "medium": ["failed", "timeout", "connection refused", "error"],
+}
 
-def analyze_file(filepath: str) -> tuple[str, str]:
-    file_size_kb = 0
-    if Path(filepath).exists():
-        file_size_kb = max(1, int(Path(filepath).stat().st_size / 1024))
 
-    severity = "medium" if file_size_kb < 10240 else "high"
-    summary = (
-        f"Automated initial triage complete. File size={file_size_kb}KB. "
-        f"Model target: {OLLAMA_MODEL} via {OLLAMA_BASE_URL}. "
-        "Next step: parse sosreport sections and enrich root-cause mapping."
+def extract_text(filepath: str, max_chars: int = 120_000) -> str:
+    p = Path(filepath)
+    if not p.exists():
+        return ""
+
+    # try tar/tar.xz first (typical sosreport format)
+    if any(str(p).endswith(ext) for ext in [".tar", ".tar.xz", ".tgz", ".tar.gz"]):
+        chunks: list[str] = []
+        try:
+            with tarfile.open(p, "r:*") as tf:
+                for member in tf.getmembers():
+                    if not member.isfile():
+                        continue
+                    name = member.name.lower()
+                    if not any(k in name for k in ["messages", "dmesg", "secure", "journal", "syslog"]):
+                        continue
+                    f = tf.extractfile(member)
+                    if not f:
+                        continue
+                    data = f.read(24_000)
+                    text = data.decode("utf-8", errors="ignore")
+                    chunks.append(f"\n--- {member.name} ---\n{text}")
+                    if sum(len(c) for c in chunks) >= max_chars:
+                        break
+            return "".join(chunks)[:max_chars]
+        except Exception:
+            pass
+
+    # fallback: raw decode file
+    raw = p.read_bytes()[:max_chars]
+    return raw.decode("utf-8", errors="ignore")
+
+
+def detect_signals(text: str) -> tuple[str, list[str]]:
+    lower = text.lower()
+    hits: list[str] = []
+
+    sev_rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+    severity = "low"
+
+    for level, patterns in SIGNALS.items():
+        for pat in patterns:
+            if pat in lower:
+                hits.append(f"{level}:{pat}")
+                if sev_rank[level] > sev_rank[severity]:
+                    severity = level
+
+    if not hits and text:
+        severity = "medium" if "warn" in lower else "low"
+
+    return severity, hits[:12]
+
+
+def ai_summary(text: str, severity: str, hits: list[str]) -> str:
+    snippet = text[:5000] if text else "(empty)"
+    prompt = (
+        "You are SRE incident assistant. Summarize this sosreport evidence in <= 5 lines. "
+        "Return concise markdown bullet points: probable root cause, impacted component, first fix step.\n\n"
+        f"Detected severity: {severity}\n"
+        f"Detected signals: {', '.join(hits) if hits else 'none'}\n\n"
+        f"Evidence:\n{snippet}"
     )
-    return severity, summary
+
+    payload = json.dumps(
+        {
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+        }
+    ).encode("utf-8")
+
+    req = urllib.request.Request(
+        url=f"{OLLAMA_BASE_URL}/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=40) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+            result = body.get("response", "").strip()
+            if result:
+                return result[:1800]
+    except Exception:
+        pass
+
+    # fallback summary (no AI dependency)
+    return (
+        f"Initial triage complete. Severity={severity}. "
+        f"Signals: {', '.join(hits) if hits else 'none'}. "
+        "Recommended first action: inspect logs around detected signals and validate system resource headroom."
+    )
 
 
 def update_report(report_id: str, severity: str, summary: str, status: str = "analyzed") -> None:
@@ -63,9 +153,11 @@ def main():
             report_id = data["report_id"]
             filepath = data["filepath"]
 
-            severity, summary = analyze_file(filepath)
+            text = extract_text(filepath)
+            severity, hits = detect_signals(text)
+            summary = ai_summary(text, severity, hits)
             update_report(report_id, severity, summary, status="analyzed")
-            print(f"[worker] analyzed report={report_id}")
+            print(f"[worker] analyzed report={report_id} severity={severity}")
         except Exception as exc:
             print(f"[worker] failed job: {exc}")
             time.sleep(2)
