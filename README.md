@@ -127,6 +127,25 @@ SagaraOps/
 - Week 3: Dashboard + filtering
 - Week 4: Hardening + CI/CD + demo assets
 
+## ⚙️ Quick Start (Phase 2)
+
+```bash
+# from repo root
+cp .env.example .env
+
+# start local stack
+cd infra/docker
+docker compose up -d --build
+```
+
+Then open:
+- Web: `http://localhost:3000`
+- API health: `http://localhost:8000/health`
+
+> Note: Pull a local model for Ollama after container starts (example):
+>
+> `docker exec -it <ollama-container> ollama pull llama3.1:8b`
+
 ---
 
 ## 👤 Author
