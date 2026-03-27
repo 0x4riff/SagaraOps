@@ -3,5 +3,5 @@ uvicorn[standard]==0.35.0
 pydantic==2.11.7
 redis==6.4.0
 python-multipart==0.0.22
-psycopg[binary]==3.2.9
+psycopg[binary]==3.3.3
 reportlab==4.4.3
