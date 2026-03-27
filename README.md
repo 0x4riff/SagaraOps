@@ -154,6 +154,7 @@ SagaraOps/
 - [Use Cases](docs/use-cases.md)
 - [Design Decisions](docs/design-decisions.md)
 - [Branch Protection Baseline](docs/branch-protection.md)
+- [Manual Book](docs/manual-book/MANUAL.md)
 
 ---
 
