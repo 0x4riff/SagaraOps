@@ -27,11 +27,13 @@ def init_db() -> None:
                     status TEXT NOT NULL,
                     severity TEXT,
                     summary TEXT,
+                    findings_json TEXT,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 );
                 """
             )
+            cur.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS findings_json TEXT;")
             cur.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_reports_created_at

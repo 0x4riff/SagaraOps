@@ -1,9 +1,10 @@
-import io
 import json
 import os
+import re
 import tarfile
 import time
 import urllib.request
+from collections import defaultdict
 from pathlib import Path
 
 import psycopg
@@ -15,19 +16,23 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://sagaraops:sagaraops@postgres:5432/sagaraops")
 
-SIGNALS = {
-    "critical": ["kernel panic", "filesystem corruption", "segfault"],
-    "high": ["out of memory", "oom-killer", "no space left on device", "disk full"],
-    "medium": ["failed", "timeout", "connection refused", "error"],
-}
+SIGNAL_RULES = [
+    {"category": "kernel", "severity": "critical", "signal": "kernel panic", "pattern": r"kernel panic"},
+    {"category": "memory", "severity": "high", "signal": "oom killer", "pattern": r"oom-killer|out of memory"},
+    {"category": "disk", "severity": "high", "signal": "disk full", "pattern": r"no space left on device|disk full"},
+    {"category": "service", "severity": "medium", "signal": "service failed", "pattern": r"\bfailed\b"},
+    {"category": "network", "severity": "medium", "signal": "connection refused", "pattern": r"connection refused"},
+    {"category": "network", "severity": "medium", "signal": "timeout", "pattern": r"timeout"},
+]
+
+SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 
-def extract_text(filepath: str, max_chars: int = 120_000) -> str:
+def extract_text(filepath: str, max_chars: int = 200_000) -> str:
     p = Path(filepath)
     if not p.exists():
         return ""
 
-    # try tar/tar.xz first (typical sosreport format)
     if any(str(p).endswith(ext) for ext in [".tar", ".tar.xz", ".tgz", ".tar.gz"]):
         chunks: list[str] = []
         try:
@@ -36,12 +41,12 @@ def extract_text(filepath: str, max_chars: int = 120_000) -> str:
                     if not member.isfile():
                         continue
                     name = member.name.lower()
-                    if not any(k in name for k in ["messages", "dmesg", "secure", "journal", "syslog"]):
+                    if not any(k in name for k in ["messages", "dmesg", "secure", "journal", "syslog", "df", "free", "top"]):
                         continue
                     f = tf.extractfile(member)
                     if not f:
                         continue
-                    data = f.read(24_000)
+                    data = f.read(40_000)
                     text = data.decode("utf-8", errors="ignore")
                     chunks.append(f"\n--- {member.name} ---\n{text}")
                     if sum(len(c) for c in chunks) >= max_chars:
@@ -50,49 +55,69 @@ def extract_text(filepath: str, max_chars: int = 120_000) -> str:
         except Exception:
             pass
 
-    # fallback: raw decode file
     raw = p.read_bytes()[:max_chars]
     return raw.decode("utf-8", errors="ignore")
 
 
-def detect_signals(text: str) -> tuple[str, list[str]]:
-    lower = text.lower()
-    hits: list[str] = []
+def parse_findings(text: str) -> tuple[str, list[dict]]:
+    lines = text.splitlines()
+    findings: list[dict] = []
+    max_severity = "low"
 
-    sev_rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-    severity = "low"
+    for rule in SIGNAL_RULES:
+        pattern = re.compile(rule["pattern"], re.IGNORECASE)
+        matched_lines = [ln.strip() for ln in lines if pattern.search(ln)]
+        if not matched_lines:
+            continue
 
-    for level, patterns in SIGNALS.items():
-        for pat in patterns:
-            if pat in lower:
-                hits.append(f"{level}:{pat}")
-                if sev_rank[level] > sev_rank[severity]:
-                    severity = level
+        grouped = defaultdict(int)
+        for m in matched_lines:
+            grouped[m[:180]] += 1
 
-    if not hits and text:
-        severity = "medium" if "warn" in lower else "low"
+        top_line, count = max(grouped.items(), key=lambda kv: kv[1])
+        findings.append(
+            {
+                "category": rule["category"],
+                "severity": rule["severity"],
+                "signal": rule["signal"],
+                "count": count,
+                "evidence": top_line,
+            }
+        )
 
-    return severity, hits[:12]
+        if SEVERITY_RANK[rule["severity"]] > SEVERITY_RANK[max_severity]:
+            max_severity = rule["severity"]
+
+    if not findings:
+        if text.strip():
+            findings.append(
+                {
+                    "category": "general",
+                    "severity": "low",
+                    "signal": "no known critical pattern",
+                    "count": 0,
+                    "evidence": "No predefined signals matched in extracted content.",
+                }
+            )
+        return "low", findings
+
+    findings.sort(key=lambda f: SEVERITY_RANK[f["severity"]], reverse=True)
+    return max_severity, findings
 
 
-def ai_summary(text: str, severity: str, hits: list[str]) -> str:
-    snippet = text[:5000] if text else "(empty)"
+def ai_summary(text: str, severity: str, findings: list[dict]) -> str:
+    findings_text = "\n".join(
+        [f"- {f['severity']} | {f['category']} | {f['signal']} | count={f['count']} | evidence={f['evidence']}" for f in findings[:8]]
+    )
     prompt = (
-        "You are SRE incident assistant. Summarize this sosreport evidence in <= 5 lines. "
-        "Return concise markdown bullet points: probable root cause, impacted component, first fix step.\n\n"
+        "You are an SRE incident assistant. Produce concise incident triage output in markdown bullets. "
+        "Include probable cause, impacted component, immediate mitigation, and next investigation step.\n\n"
         f"Detected severity: {severity}\n"
-        f"Detected signals: {', '.join(hits) if hits else 'none'}\n\n"
-        f"Evidence:\n{snippet}"
+        f"Structured findings:\n{findings_text}\n\n"
+        f"Evidence excerpt:\n{text[:5000]}"
     )
 
-    payload = json.dumps(
-        {
-            "model": OLLAMA_MODEL,
-            "prompt": prompt,
-            "stream": False,
-        }
-    ).encode("utf-8")
-
+    payload = json.dumps({"model": OLLAMA_MODEL, "prompt": prompt, "stream": False}).encode("utf-8")
     req = urllib.request.Request(
         url=f"{OLLAMA_BASE_URL}/api/generate",
         data=payload,
@@ -103,21 +128,24 @@ def ai_summary(text: str, severity: str, hits: list[str]) -> str:
     try:
         with urllib.request.urlopen(req, timeout=40) as resp:
             body = json.loads(resp.read().decode("utf-8"))
-            result = body.get("response", "").strip()
-            if result:
-                return result[:1800]
+            out = body.get("response", "").strip()
+            if out:
+                return out[:2000]
     except Exception:
         pass
 
-    # fallback summary (no AI dependency)
+    # deterministic fallback
+    top = findings[0]
     return (
-        f"Initial triage complete. Severity={severity}. "
-        f"Signals: {', '.join(hits) if hits else 'none'}. "
-        "Recommended first action: inspect logs around detected signals and validate system resource headroom."
+        f"- Severity: **{severity.upper()}**\n"
+        f"- Primary signal: `{top['signal']}` in `{top['category']}`\n"
+        f"- Evidence: {top['evidence']}\n"
+        f"- Immediate action: inspect related logs/service status and verify resource headroom.\n"
+        f"- Next step: validate recurrence window and affected hosts."
     )
 
 
-def update_report(report_id: str, severity: str, summary: str, status: str = "analyzed") -> None:
+def update_report(report_id: str, severity: str, summary: str, findings: list[dict], status: str = "analyzed") -> None:
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -126,10 +154,11 @@ def update_report(report_id: str, severity: str, summary: str, status: str = "an
                 SET status = %s,
                     severity = %s,
                     summary = %s,
+                    findings_json = %s,
                     updated_at = NOW()
                 WHERE id = %s;
                 """,
-                (status, severity, summary, report_id),
+                (status, severity, summary, json.dumps(findings), report_id),
             )
         conn.commit()
 
@@ -154,10 +183,10 @@ def main():
             filepath = data["filepath"]
 
             text = extract_text(filepath)
-            severity, hits = detect_signals(text)
-            summary = ai_summary(text, severity, hits)
-            update_report(report_id, severity, summary, status="analyzed")
-            print(f"[worker] analyzed report={report_id} severity={severity}")
+            severity, findings = parse_findings(text)
+            summary = ai_summary(text, severity, findings)
+            update_report(report_id, severity, summary, findings, status="analyzed")
+            print(f"[worker] analyzed report={report_id} severity={severity} findings={len(findings)}")
         except Exception as exc:
             print(f"[worker] failed job: {exc}")
             time.sleep(2)

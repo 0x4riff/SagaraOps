@@ -38,8 +38,10 @@ SagaraOps provides a structured triage pipeline:
 - Upload report files from the web dashboard
 - Queue-based background processing (Redis + worker)
 - PostgreSQL-backed report state and summaries
-- Rule-based severity classification
+- Structured parser for core incident signals (kernel, memory, disk, service, network)
+- Rule-based severity classification with evidence snippets
 - AI-assisted summarization with local model endpoint (`Ollama`)
+- Report export endpoints (Markdown and PDF)
 - CI workflow for API/web validation
 
 ---
@@ -105,7 +107,9 @@ docker exec -it docker-ollama-1 ollama pull llama3.1:8b
 - `GET /health` — API health check
 - `POST /v1/reports/upload` — upload report file
 - `GET /v1/reports` — list reports
-- `GET /v1/reports/{report_id}` — report detail
+- `GET /v1/reports/{report_id}` — report detail (includes structured findings)
+- `GET /v1/reports/{report_id}/export.md` — export markdown report
+- `GET /v1/reports/{report_id}/export.pdf` — export PDF report
 
 ---
 
