@@ -5,7 +5,9 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+import zipfile
+
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from redis import Redis
 from reportlab.lib.pagesizes import A4
@@ -196,14 +198,44 @@ def export_report_markdown(report_id: str):
 
 
 @app.get("/v1/reports/{report_id}/export.json")
-def export_report_json(report_id: str):
+def export_report_json(report_id: str, download: bool = Query(False)):
     row = _fetch_report_row(report_id)
     if not row:
         raise HTTPException(status_code=404, detail="Report not found")
 
     report = _to_report(row)
     pkg = _build_export_package(report)
-    return JSONResponse(pkg)
+
+    headers = None
+    if download:
+        headers = {"Content-Disposition": f"attachment; filename=triage-{report_id}.json"}
+
+    return JSONResponse(pkg, headers=headers)
+
+
+@app.get("/v1/reports/{report_id}/export.bundle")
+def export_report_bundle(report_id: str):
+    row = _fetch_report_row(report_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    report = _to_report(row)
+    pkg = _build_export_package(report)
+    markdown = _build_markdown_report(report)
+    pdf_data = _build_pdf(markdown)
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"triage-{report_id}.json", json.dumps(pkg, indent=2))
+        zf.writestr(f"triage-{report_id}.md", markdown)
+        zf.writestr(f"triage-{report_id}.pdf", pdf_data)
+
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=triage-{report_id}.zip"},
+    )
 
 
 @app.get("/v1/reports/{report_id}/export.pdf")
