@@ -14,6 +14,16 @@ Main sections:
 
 ---
 
+## 1.1) Operational Graphics (Modern)
+
+![Dashboard Graphs](./images/03-dashboard-graphs.png)
+
+Added modern visual analytics:
+- **Network Spike Trend** (sparkline): quick anomaly scanning over recent reports
+- **Signal Matrix** (heat-style): category × severity distribution at a glance
+
+---
+
 ## 2) Upload and Analyze
 
 1. Open dashboard (`/`)
