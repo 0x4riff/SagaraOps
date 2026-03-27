@@ -1,0 +1,13 @@
+# Default owner for all files
+*       @0x4riff
+
+# CI/CD and security workflows
+/.github/                @0x4riff
+/.github/workflows/      @0x4riff
+
+# Application areas
+/apps/api/               @0x4riff
+/apps/web/               @0x4riff
+/workers/analyzer/       @0x4riff
+/infra/                  @0x4riff
+/docs/                   @0x4riff
