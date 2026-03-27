@@ -69,7 +69,7 @@ def _fetch_report_row(report_id: str):
 def _build_markdown_report(report: ReportOut) -> str:
     findings_md = "\n".join(
         [
-            f"- **[{f.severity.upper()}]** `{f.category}` · `{f.signal}` (count={f.count})\n  - evidence: {f.evidence}"
+            f"- **[{f.severity.upper()}]** `{f.category}` - `{f.signal}` (count={f.count})\n  - evidence: {f.evidence}"
             for f in report.findings
         ]
     ) or "- No structured findings available."

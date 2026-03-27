@@ -47,7 +47,7 @@ def extract_text(filepath: str, max_chars: int = 200_000) -> str:
                     if not f:
                         continue
                     data = f.read(40_000)
-                    text = data.decode("utf-8", errors="ignore")
+                    text = data.decode("utf-8-sig", errors="ignore")
                     chunks.append(f"\n--- {member.name} ---\n{text}")
                     if sum(len(c) for c in chunks) >= max_chars:
                         break
@@ -56,7 +56,7 @@ def extract_text(filepath: str, max_chars: int = 200_000) -> str:
             pass
 
     raw = p.read_bytes()[:max_chars]
-    return raw.decode("utf-8", errors="ignore")
+    return raw.decode("utf-8-sig", errors="ignore")
 
 
 def parse_findings(text: str) -> tuple[str, list[dict]]:
@@ -72,7 +72,8 @@ def parse_findings(text: str) -> tuple[str, list[dict]]:
 
         grouped = defaultdict(int)
         for m in matched_lines:
-            grouped[m[:180]] += 1
+            clean = m.replace("\ufeff", "").replace("\x00", "").strip()
+            grouped[clean[:180]] += 1
 
         top_line, count = max(grouped.items(), key=lambda kv: kv[1])
         findings.append(
