@@ -30,6 +30,47 @@ function Badge({ value, mode = "severity" }: { value?: string | null; mode?: "se
   return <span className={`badge ${cls}`}>{value || "unknown"}</span>;
 }
 
+function Sparkline({ values }: { values: number[] }) {
+  const width = 560;
+  const height = 150;
+  const max = Math.max(1, ...values);
+  const step = values.length > 1 ? width / (values.length - 1) : width;
+
+  const points = values
+    .map((v, i) => {
+      const x = i * step;
+      const y = height - (v / max) * (height - 20) - 10;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const area = `0,${height} ${points} ${width},${height}`;
+
+  return (
+    <div className="spark-wrap">
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="160" role="img" aria-label="network spike trend">
+        {[0.25, 0.5, 0.75].map((p) => (
+          <line key={p} className="spark-grid" x1={0} y1={height * p} x2={width} y2={height * p} />
+        ))}
+        <polygon className="spark-area" points={area} />
+        <polyline className="spark-line" points={points} />
+        {values.map((v, i) => {
+          const x = i * step;
+          const y = height - (v / max) * (height - 20) - 10;
+          return <circle key={i} className="spark-dot" cx={x} cy={y} r={2.7} />;
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function heatClass(n: number) {
+  if (n <= 0) return "h0";
+  if (n <= 2) return "h1";
+  if (n <= 5) return "h2";
+  return "h3";
+}
+
 export default function HomePage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(false);
@@ -90,6 +131,31 @@ export default function HomePage() {
     return { total, critical, analyzed, queued };
   }, [reports]);
 
+  const networkTrend = useMemo(() => {
+    const sorted = [...reports].sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at));
+    const last = sorted.slice(-16);
+    return last.map((r) => (r.findings || []).filter((f) => f.category === "network").reduce((s, f) => s + (f.count || 0), 0));
+  }, [reports]);
+
+  const matrix = useMemo(() => {
+    const categories = ["kernel", "memory", "disk", "service", "network", "general"];
+    const severities = ["critical", "high", "medium", "low"];
+    const base: Record<string, Record<string, number>> = {};
+    categories.forEach((c) => {
+      base[c] = { critical: 0, high: 0, medium: 0, low: 0 };
+    });
+
+    reports.forEach((r) => {
+      (r.findings || []).forEach((f) => {
+        const c = categories.includes(f.category) ? f.category : "general";
+        const s = severities.includes(f.severity) ? f.severity : "low";
+        base[c][s] += f.count || 1;
+      });
+    });
+
+    return { categories, severities, base };
+  }, [reports]);
+
   return (
     <main className="container">
       <header className="header">
@@ -105,6 +171,48 @@ export default function HomePage() {
         <div className="card"><h3>Critical</h3><div className="kpi-value">{kpi.critical}</div></div>
         <div className="card"><h3>Analyzed</h3><div className="kpi-value">{kpi.analyzed}</div></div>
         <div className="card"><h3>Queued</h3><div className="kpi-value">{kpi.queued}</div></div>
+      </section>
+
+      <section className="charts">
+        <article className="card chart-shell">
+          <h3 style={{ marginTop: 0 }}>Network Spike Trend</h3>
+          <div className="subtle">Recent network signal intensity from latest analyzed reports</div>
+          <Sparkline values={networkTrend.length ? networkTrend : [0, 0, 0, 0, 0]} />
+          <div className="legend">
+            <span>Latest points: <b>{networkTrend.slice(-5).join(" • ") || "0"}</b></span>
+          </div>
+        </article>
+
+        <article className="card chart-shell">
+          <h3 style={{ marginTop: 0 }}>Signal Matrix</h3>
+          <div className="subtle">Category × severity distribution</div>
+          <table className="matrix">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Critical</th>
+                <th>High</th>
+                <th>Medium</th>
+                <th>Low</th>
+              </tr>
+            </thead>
+            <tbody>
+              {matrix.categories.map((c) => (
+                <tr key={c}>
+                  <td>{c}</td>
+                  {matrix.severities.map((s) => {
+                    const n = matrix.base[c][s];
+                    return (
+                      <td key={`${c}-${s}`}>
+                        <span className={`heat ${heatClass(n)}`}>{n}</span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </article>
       </section>
 
       <section className="card" style={{ marginBottom: 14 }}>
