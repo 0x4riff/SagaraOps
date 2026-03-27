@@ -15,6 +15,9 @@ updates:
       - dependency-name: "eslint"
         update-types:
           - "version-update:semver-major"
+      - dependency-name: "eslint-config-next"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: "pip"
     directory: "/apps/api"
