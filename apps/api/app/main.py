@@ -8,6 +8,7 @@ from pathlib import Path
 import zipfile
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from redis import Redis
 from reportlab.lib.pagesizes import A4
@@ -20,7 +21,17 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 QUEUE_KEY = os.getenv("QUEUE_KEY", "sos:jobs")
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/data/uploads"))
 
-app = FastAPI(title="SagaraOps API", version="0.5.0")
+app = FastAPI(title="SagaraOps API", version="0.5.1")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 redis_client = Redis.from_url(REDIS_URL, decode_responses=True)
 
 ROW_KEYS = ["id", "filename", "status", "severity", "summary", "findings_json", "created_at", "updated_at"]
