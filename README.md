@@ -147,6 +147,7 @@ SagaraOps/
 - [Roadmap](docs/roadmap.md)
 - [Use Cases](docs/use-cases.md)
 - [Design Decisions](docs/design-decisions.md)
+- [Branch Protection Baseline](docs/branch-protection.md)
 
 ---
 
