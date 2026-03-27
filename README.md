@@ -108,6 +108,7 @@ docker exec -it docker-ollama-1 ollama pull llama3.1:8b
 - `POST /v1/reports/upload` — upload report file
 - `GET /v1/reports` — list reports
 - `GET /v1/reports/{report_id}` — report detail (includes structured findings)
+- `GET /v1/reports/{report_id}/export.json` — export machine-readable report package
 - `GET /v1/reports/{report_id}/export.md` — export markdown report
 - `GET /v1/reports/{report_id}/export.pdf` — export PDF report
 
